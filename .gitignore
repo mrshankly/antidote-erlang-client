@@ -1,6 +1,7 @@
 deps/
 ebin/
 _build/
+_checkouts/
 *.xml
 logs/
 *.beam
