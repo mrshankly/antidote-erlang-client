@@ -21,29 +21,32 @@
 
 -include_lib("antidote_pb_codec/include/antidote_pb.hrl").
 
-
--export([start_transaction/2,
-         start_transaction/3,
-         abort_transaction/2,
-         commit_transaction/2,
-         update_objects/3,
-         read_objects/3,
-         read_values/3]).
+-export([
+    start_transaction/2,
+    start_transaction/3,
+    abort_transaction/2,
+    commit_transaction/2,
+    update_objects/4,
+    update_objects/3,
+    read_objects/3,
+    read_values/3,
+    encrypt_updates/2
+]).
 
 -define(TIMEOUT, 10000).
 
--spec start_transaction(Pid::pid(), TimeStamp::binary() | ignore)
-        -> {ok, {interactive, term()} | {static, {term(), term()}}} | {error, term()}.
+-spec start_transaction(Pid::pid(), TimeStamp::binary() | ignore) ->
+    {ok, {interactive, term()} | {static, {term(), term()}}} | {error, term()}.
 start_transaction(Pid, TimeStamp) ->
     start_transaction(Pid, TimeStamp, []).
 
--spec start_transaction(Pid::pid(), TimeStamp::binary() | ignore, TxnProperties::term())
-        -> {ok, {interactive, binary()} | {static, {binary(), term()}}} | {error, term()}.
+-spec start_transaction(Pid::pid(), TimeStamp::binary() | ignore, TxnProperties::term()) ->
+    {ok, {interactive, binary()} | {static, {binary(), term()}}} | {error, term()}.
 start_transaction(Pid, TimeStamp, TxnProperties) ->
     EncTimestamp = case TimeStamp of
-                ignore -> term_to_binary(ignore);
-                Binary -> Binary
-            end,
+        ignore -> term_to_binary(ignore);
+        Binary -> Binary
+    end,
     case is_static(TxnProperties) of
         true ->
             {ok, {static, {EncTimestamp, TxnProperties}}};
@@ -83,7 +86,7 @@ abort_transaction(Pid, {interactive, TxId}) ->
     end.
 
 -spec commit_transaction(Pid::pid(), TxId::{interactive, binary()} | {static, binary()}) ->
-                                {ok, binary()} | {error, term()}.
+    {ok, binary()} | {error, term()}.
 commit_transaction(Pid, {interactive, TxId}) ->
     EncMsg = antidote_pb_codec:encode_request({commit_transaction, TxId}),
     Result = antidotec_pb_socket:call_infinity(Pid, {req, EncMsg, ?TIMEOUT}),
@@ -97,27 +100,32 @@ commit_transaction(Pid, {interactive, TxId}) ->
                 Other -> {error, Other}
             end
     end;
+
 commit_transaction(Pid, {static, _TxId}) ->
     case antidotec_pb_socket:get_last_commit_time(Pid) of
         {ok, CommitTime} ->
              {ok, CommitTime}
     end.
 
--spec update_objects(Pid::pid(), Updates::[{term(), term(), term()}], {interactive | static, TxId::binary()}) -> ok | {error, term()}.
+update_objects(Pid, Updates, Tx, Key) ->
+    EncryptedUpdates = encrypt_updates(Updates, Key),
+    update_objects(Pid, EncryptedUpdates, Tx).
+
+-spec update_objects(Pid::pid(), Updates::[{term(), term(), term()}], {interactive | static, TxId::binary()}) ->
+    ok | {error, term()}.
 update_objects(Pid, Updates, {interactive, TxId}) ->
-    EncMsg = antidote_pb_codec: encode_request({update_objects, Updates, TxId}),
-    Result = antidotec_pb_socket: call_infinity(Pid, {req, EncMsg, ?TIMEOUT}),
+    EncMsg = antidote_pb_codec:encode_request({update_objects, Updates, TxId}),
+    Result = antidotec_pb_socket:call_infinity(Pid, {req, EncMsg, ?TIMEOUT}),
     case Result of
         {error, timeout} -> {error, timeout};
         _ ->
-            case antidote_pb_codec: decode_response(Result) of
+            case antidote_pb_codec:decode_response(Result) of
                 {operation_response, ok} -> ok;
                 {operation_response, {error, Reason}} -> {error, Reason};
                 {error_response, Reason} -> {error, Reason};
                 Other -> {error, Other}
             end
     end;
-
 update_objects(Pid, Updates, {static, TxId}) ->
     {Clock, Properties} = TxId,
     EncMsg = antidote_pb_codec:encode_request({static_update_objects, Clock, Properties, Updates}),
@@ -181,10 +189,23 @@ read_values(Pid, Objects, {static, TxId}) ->
             end
     end.
 
-
 is_static(TxnProperties) ->
     case TxnProperties of
         [{static, true}] ->
             true;
         _ -> false
+    end.
+
+encrypt_updates(Updates, Key) ->
+    encrypt_updates(Updates, Key, []).
+
+encrypt_updates([], _Key, Acc) ->
+    Acc;
+encrypt_updates([{{_, Type, _}, _, _} = Update | Updates], Key, Acc) ->
+    case antidotec_datatype:is_secure(Type) of
+        true ->
+            {ok, Mod} = antidotec_datatype:module_from_secure_type(Type),
+            encrypt_updates(Updates, Key, [Mod:encrypt(Update, Key) | Acc]);
+        false ->
+            encrypt_updates(Updates, Key, [Update | Acc])
     end.

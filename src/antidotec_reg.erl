@@ -22,22 +22,23 @@
 -include_lib("antidote_pb_codec/include/antidote_pb.hrl").
 
 -behaviour(antidotec_datatype).
+-behaviour(antidotec_secure_datatype).
 
--export([new/0,
-         new/1,
-         value/1,
-         dirty_value/1,
-         is_type/1,
-         to_ops/2,
-         type/0
-        ]).
+-export([
+    new/0,
+    new/1,
+    value/1,
+    dirty_value/1,
+    is_type/1,
+    to_ops/2,
+    type/0
+]).
 
--export([assign/2
-        ]).
+-export([encrypt/2,decrypt/2]).
 
--record(antidote_reg, {
-            value
-         }).
+-export([assign/2]).
+
+-record(antidote_reg, {value}).
 
 -export_type([antidote_reg/0]).
 -opaque antidote_reg() :: #antidote_reg{}.
@@ -46,11 +47,9 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-
 -spec new() -> antidote_reg().
 new() ->
     #antidote_reg{value=""}.
-
 
 new(Value) ->
     #antidote_reg{value=Value}.
@@ -69,13 +68,18 @@ is_type(T) ->
 -spec type() -> reg.
 type() -> reg.
 
--spec to_ops(term(), term()) -> [].
-to_ops(_, _) ->
-    [].
+to_ops(BoundObject, #antidote_reg{value=Value}) ->
+    [{BoundObject, assign, Value}].
 
 assign(_, Value) ->
     #antidote_reg{value=Value}.
 
+encrypt({BoundObject, assign, Plaintext}, Key) ->
+    Ciphertext = antidotec_crypto:probabilistic_encrypt(Plaintext, Key),
+    {BoundObject, assign, Ciphertext}.
+
+decrypt(Ciphertext, Key) ->
+    antidotec_crypto:probabilistic_decrypt(Ciphertext, Key).
 
 %% ===================================================================
 %% EUnit tests

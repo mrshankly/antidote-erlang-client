@@ -24,7 +24,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-
 -behaviour(antidotec_datatype).
 
 -export([new/0, new/1,
@@ -95,11 +94,11 @@ is_type(T) ->
 type() ->
      counter.
 
-to_ops(_BoundObject, #counter{increment = 0}) -> [];
-
+-spec to_ops(term(), #counter{}) -> [term()].
+to_ops(_BoundObject, #counter{increment = 0}) ->
+    [];
 to_ops(BoundObject, #counter{increment = Amount}) when Amount < 0 ->
     [{BoundObject, decrement, -Amount}];
-
 to_ops(BoundObject, #counter{increment = Amount}) ->
     [{BoundObject, increment, Amount}].
 

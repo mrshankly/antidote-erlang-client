@@ -1,0 +1,34 @@
+# Connect to server.
+
+{ok, Pid} = antidotec_pb_socket:start_link("127.0.0.1", 8087).
+
+# Start interactive transaction.
+
+{ok, TxId1} = antidotec_pb:start_transaction(Pid, ignore).
+
+# Commit transaction.
+
+{ok, Tx1CommitTimestamp} = antidotec_pb:commit_transaction(Pid, TxId1).
+
+# Object.
+
+RegisterObject = {<<"test_lww_register">>, antidote_crdt_register_lww, <<"test_bucket">>}.
+RegisterObject = {<<"test_lww_register">>, antidote_secure_crdt_register_lww, <<"test_bucket">>}.
+
+# Read object.
+
+{ok, [Register]} = antidotec_pb:read_objects(Pid, [RegisterObject], TxId1).
+antidotec_reg:value(Register).
+
+# Update object.
+
+NewValue = antidotec_reg:assign(antidotec_reg:new(), "Antidote rules!").
+RegisterUpdateOp = antidotec_reg:to_ops(RegisterObject, NewValue).
+ok = antidotec_pb:update_objects(Pid, RegisterUpdateOp, TxId1).
+
+# Encryption.
+
+NewValue = antidotec_reg:assign(antidotec_reg:new(), "Antidote rules!").
+RegisterUpdateOp = antidotec_reg:to_ops(RegisterObject, NewValue).
+Key = antidotec_crypto:generate_key().
+ok = antidotec_pb:update_objects(Pid, RegisterUpdateOp, TxId1, Key).

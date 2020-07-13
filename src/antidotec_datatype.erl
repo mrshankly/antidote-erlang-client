@@ -26,11 +26,14 @@
 -compile(export_all).
 -endif.
 
-
 -define(MODULES, [antidotec_counter, antidotec_set, antidotec_reg]).
 
--export([module_for_type/1,
-         module_for_term/1]).
+-export([
+    module_for_type/1,
+    module_for_term/1,
+    module_from_secure_type/1,
+    is_secure/1
+]).
 
 -export_type([datatype/0, update/0]).
 
@@ -81,3 +84,18 @@ module_for_term(T) ->
                    (_, Mod) ->
                         Mod
                 end, undefined, ?MODULES).
+
+-spec module_from_secure_type(atom()) -> {ok, atom()} | {error, undefined}.
+% module_from_secure_type(antidote_secure_crdt_set_aw)       -> {ok, antidotec_set};
+% module_from_secure_type(antidote_secure_crdt_set_rw)       -> {ok, antidotec_set};
+module_from_secure_type(antidote_secure_crdt_register_lww) -> {ok, antidotec_reg};
+module_from_secure_type(_) -> {error, undefined}.
+
+-spec is_secure(atom()) -> boolean().
+% is_secure(antidote_secure_crdt_set_aw)       -> true;
+% is_secure(antidote_secure_crdt_set_rw)       -> true;
+is_secure(antidote_secure_crdt_register_lww) -> true;
+% is_secure(antidote_secure_crdt_register_mv)  -> true;
+% is_secure(antidote_secure_crdt_map_go)       -> true;
+% is_secure(antidote_secure_crdt_map_rr)       -> true;
+is_secure(_)                                 -> false.
