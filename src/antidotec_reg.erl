@@ -78,8 +78,9 @@ encrypt({BoundObject, assign, Plaintext}, Key) ->
     Ciphertext = antidotec_crypto:probabilistic_encrypt(Plaintext, Key),
     {BoundObject, assign, Ciphertext}.
 
-decrypt(Ciphertext, Key) ->
-    antidotec_crypto:probabilistic_decrypt(Ciphertext, Key).
+decrypt(#antidote_reg{value=Ciphertext}, Key) ->
+    Plaintext = antidotec_crypto:probabilistic_decrypt(Ciphertext, Key),
+    #antidote_reg{value=Plaintext}.
 
 %% ===================================================================
 %% EUnit tests

@@ -28,6 +28,7 @@
     commit_transaction/2,
     update_objects/4,
     update_objects/3,
+    read_objects/4,
     read_objects/3,
     read_values/3,
     encrypt_updates/2
@@ -144,6 +145,14 @@ update_objects(Pid, Updates, {static, TxId}) ->
             end
     end.
 
+read_objects(Pid, Objects, Tx, Key) ->
+    case read_objects(Pid, Objects, Tx) of
+        {ok, Values} ->
+            {ok, decrypt_values(Objects, Values, Key)};
+        Error ->
+            Error
+    end.
+
 -spec read_objects(Pid::pid(), Objects::[term()], {interactive | static, TxId::binary()}) -> {ok, [term()]}  | {error, term()}.
 read_objects(Pid, Objects, Transaction) ->
     case read_values(Pid, Objects, Transaction) of
@@ -200,7 +209,7 @@ encrypt_updates(Updates, Key) ->
     encrypt_updates(Updates, Key, []).
 
 encrypt_updates([], _Key, Acc) ->
-    Acc;
+    lists:reverse(Acc);
 encrypt_updates([{{_, Type, _}, _, _} = Update | Updates], Key, Acc) ->
     case antidotec_datatype:is_secure(Type) of
         true ->
@@ -208,4 +217,18 @@ encrypt_updates([{{_, Type, _}, _, _} = Update | Updates], Key, Acc) ->
             encrypt_updates(Updates, Key, [Mod:encrypt(Update, Key) | Acc]);
         false ->
             encrypt_updates(Updates, Key, [Update | Acc])
+    end.
+
+decrypt_values(Objects, Values, Key) ->
+    decrypt_values(Objects, Values, Key, []).
+
+decrypt_values([], [], _Key, Acc) ->
+    lists:reverse(Acc);
+decrypt_values([{_, Type, _} | Objects], [Value | Values], Key, Acc) ->
+    case antidotec_datatype:is_secure(Type) of
+        true ->
+            {ok, Mod} = antidotec_datatype:module_from_secure_type(Type),
+            decrypt_values(Objects, Values, Key, [Mod:decrypt(Value, Key) | Acc]);
+        false ->
+            decrypt_values(Objects, Values, Key, [Value | Acc])
     end.
