@@ -1,1 +1,4 @@
-[].
+[{<<"antidote_pb_codec">>,
+  {git,"https://github.com/mrshankly/antidote_pb_codec.git",
+       {ref,"e84876bde467ee50f2fe224bdf483a38fe130643"}},
+  0}].

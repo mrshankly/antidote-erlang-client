@@ -32,3 +32,20 @@ NewValue = antidotec_reg:assign(antidotec_reg:new(), "Antidote rules!").
 RegisterUpdateOp = antidotec_reg:to_ops(RegisterObject, NewValue).
 Key = antidotec_crypto:generate_key().
 ok = antidotec_pb:update_objects(Pid, RegisterUpdateOp, TxId1, Key).
+
+# ALL TOGETHER NOW (WRITE)
+
+{ok, Pid} = antidotec_pb_socket:start_link("127.0.0.1", 8087).
+{ok, TxId1} = antidotec_pb:start_transaction(Pid, ignore).
+RegisterObject = {<<"test_lww_register">>, antidote_secure_crdt_register_lww, <<"test_bucket">>}.
+NewValue = antidotec_reg:assign(antidotec_reg:new(), "Antidote rules!").
+RegisterUpdateOp = antidotec_reg:to_ops(RegisterObject, NewValue).
+Key = antidotec_crypto:generate_key().
+ok = antidotec_pb:update_objects(Pid, RegisterUpdateOp, TxId1, Key).
+{ok, Tx1CommitTimestamp} = antidotec_pb:commit_transaction(Pid, TxId1).
+
+# ALL TOGETHER NOW (READ)
+
+{ok, TxId2} = antidotec_pb:start_transaction(Pid, ignore).
+{ok, [Register]} = antidotec_pb:read_objects(Pid, [RegisterObject], TxId2, Key).
+antidotec_reg:value(Register).
