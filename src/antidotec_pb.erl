@@ -221,17 +221,6 @@ encrypt_updates([{{_, Type, _} = Object, Op, Params} = Update | Updates], Key, A
             encrypt_updates(Updates, Key, [Update | Acc])
     end.
 
-encrypt_op(antidote_secure_crdt_register_lww, {assign, Value}, Key) ->
-    {assign, antidotec_crypto:probabilistic_encrypt(Value, Key)};
-encrypt_op(antidote_secure_crdt_map_go, {update, Ops}, Key) when is_list(Ops) ->
-    EncryptedOps = lists:map(fun({{MapKey, Type}, Op}) ->
-        Object = {antidotec_crypto:deterministic_encrypt(MapKey, Key), Type},
-        {Object, encrypt_op(Type, Op, Key)}
-    end, Ops),
-    {update, EncryptedOps};
-encrypt_op(antidote_secure_crdt_map_go, {update, Op}, Key) ->
-    encrypt_op(antidote_secure_crdt_map_go, {update, [Op]}, Key).
-
 decrypt_values(Objects, Values, Key) ->
     decrypt_values(Objects, Values, Key, []).
 
@@ -245,3 +234,21 @@ decrypt_values([{_, Type, _} | Objects], [Value | Values], Key, Acc) ->
         false ->
             decrypt_values(Objects, Values, Key, [Value | Acc])
     end.
+
+encrypt_op(antidote_secure_crdt_register_lww, {assign, Value}, Key) ->
+    {assign, antidotec_crypto:probabilistic_encrypt(Value, Key)};
+encrypt_op(antidote_secure_crdt_set_aw, {Op, Values}, Key) when is_list(Values) ->
+    EncryptedValues = lists:map(fun(V) ->
+        antidotec_crypto:deterministic_encrypt(V, Key)
+    end, Values),
+    {Op, EncryptedValues};
+encrypt_op(antidote_secure_crdt_set_aw, {Op, Value}, Key) ->
+    {Op, antidotec_crypto:deterministic_encrypt(Value, Key)};
+encrypt_op(antidote_secure_crdt_map_go, {update, Ops}, Key) when is_list(Ops) ->
+    EncryptedOps = lists:map(fun({{MapKey, Type}, Op}) ->
+        Object = {antidotec_crypto:deterministic_encrypt(MapKey, Key), Type},
+        {Object, encrypt_op(Type, Op, Key)}
+    end, Ops),
+    {update, EncryptedOps};
+encrypt_op(antidote_secure_crdt_map_go, {update, Op}, Key) ->
+    encrypt_op(antidote_secure_crdt_map_go, {update, [Op]}, Key).

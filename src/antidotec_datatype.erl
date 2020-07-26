@@ -86,17 +86,13 @@ module_for_term(T) ->
                 end, undefined, ?MODULES).
 
 -spec module_from_secure_type(atom()) -> {ok, atom()} | {error, undefined}.
-% module_from_secure_type(antidote_secure_crdt_set_aw)       -> {ok, antidotec_set};
-% module_from_secure_type(antidote_secure_crdt_set_rw)       -> {ok, antidotec_set};
+module_from_secure_type(antidote_secure_crdt_set_aw)       -> {ok, antidotec_set};
 module_from_secure_type(antidote_secure_crdt_register_lww) -> {ok, antidotec_reg};
 module_from_secure_type(antidote_secure_crdt_map_go)       -> {ok, antidotec_map};
 module_from_secure_type(_) -> {error, undefined}.
 
 -spec is_secure(atom()) -> boolean().
-% is_secure(antidote_secure_crdt_set_aw)       -> true;
-% is_secure(antidote_secure_crdt_set_rw)       -> true;
+is_secure(antidote_secure_crdt_set_aw)       -> true;
 is_secure(antidote_secure_crdt_register_lww) -> true;
-% is_secure(antidote_secure_crdt_register_mv)  -> true;
 is_secure(antidote_secure_crdt_map_go)       -> true;
-% is_secure(antidote_secure_crdt_map_rr)       -> true;
 is_secure(_)                                 -> false.
