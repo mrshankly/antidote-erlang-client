@@ -22,7 +22,6 @@
 -include_lib("antidote_pb_codec/include/antidote_pb.hrl").
 
 -behaviour(antidotec_datatype).
--behaviour(antidotec_secure_datatype).
 
 -export([
     new/0,

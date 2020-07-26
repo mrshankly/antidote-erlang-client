@@ -115,6 +115,7 @@ update_objects(Pid, Updates, Tx, Key) ->
 -spec update_objects(Pid::pid(), Updates::[{term(), term(), term()}], {interactive | static, TxId::binary()}) ->
     ok | {error, term()}.
 update_objects(Pid, Updates, {interactive, TxId}) ->
+    io:format("~n===~nUPDATES: '~p'~n===~n~n", [Updates]),
     EncMsg = antidote_pb_codec:encode_request({update_objects, Updates, TxId}),
     Result = antidotec_pb_socket:call_infinity(Pid, {req, EncMsg, ?TIMEOUT}),
     case Result of
@@ -129,6 +130,7 @@ update_objects(Pid, Updates, {interactive, TxId}) ->
     end;
 update_objects(Pid, Updates, {static, TxId}) ->
     {Clock, Properties} = TxId,
+    io:format("~n===~nUPDATES: '~p'~n===~n~n", [Updates]),
     EncMsg = antidote_pb_codec:encode_request({static_update_objects, Clock, Properties, Updates}),
     Result = antidotec_pb_socket:call_infinity(Pid, {req, EncMsg, ?TIMEOUT}),
     case Result of
@@ -210,14 +212,25 @@ encrypt_updates(Updates, Key) ->
 
 encrypt_updates([], _Key, Acc) ->
     lists:reverse(Acc);
-encrypt_updates([{{_, Type, _}, _, _} = Update | Updates], Key, Acc) ->
+encrypt_updates([{{_, Type, _} = Object, Op, Params} = Update | Updates], Key, Acc) ->
     case antidotec_datatype:is_secure(Type) of
         true ->
-            {ok, Mod} = antidotec_datatype:module_from_secure_type(Type),
-            encrypt_updates(Updates, Key, [Mod:encrypt(Update, Key) | Acc]);
+            {Op, EncryptedParams} = encrypt_op(Type, {Op, Params}, Key),
+            encrypt_updates(Updates, Key, [{Object, Op, EncryptedParams}]);
         false ->
             encrypt_updates(Updates, Key, [Update | Acc])
     end.
+
+encrypt_op(antidote_secure_crdt_register_lww, {assign, Value}, Key) ->
+    {assign, antidotec_crypto:probabilistic_encrypt(Value, Key)};
+encrypt_op(antidote_secure_crdt_map_go, {update, Ops}, Key) when is_list(Ops) ->
+    EncryptedOps = lists:map(fun({{MapKey, Type}, Op}) ->
+        Object = {antidotec_crypto:deterministic_encrypt(MapKey, Key), Type},
+        {Object, encrypt_op(Type, Op, Key)}
+    end, Ops),
+    {update, EncryptedOps};
+encrypt_op(antidote_secure_crdt_map_go, {update, Op}, Key) ->
+    encrypt_op(antidote_secure_crdt_map_go, {update, [Op]}, Key).
 
 decrypt_values(Objects, Values, Key) ->
     decrypt_values(Objects, Values, Key, []).
