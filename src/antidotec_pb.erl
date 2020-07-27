@@ -30,6 +30,7 @@
     update_objects/3,
     read_objects/4,
     read_objects/3,
+    read_values/4,
     read_values/3,
     encrypt_updates/2
 ]).
@@ -115,7 +116,6 @@ update_objects(Pid, Updates, Tx, Key) ->
 -spec update_objects(Pid::pid(), Updates::[{term(), term(), term()}], {interactive | static, TxId::binary()}) ->
     ok | {error, term()}.
 update_objects(Pid, Updates, {interactive, TxId}) ->
-    io:format("~n===~nUPDATES: '~p'~n===~n~n", [Updates]),
     EncMsg = antidote_pb_codec:encode_request({update_objects, Updates, TxId}),
     Result = antidotec_pb_socket:call_infinity(Pid, {req, EncMsg, ?TIMEOUT}),
     case Result of
@@ -130,7 +130,6 @@ update_objects(Pid, Updates, {interactive, TxId}) ->
     end;
 update_objects(Pid, Updates, {static, TxId}) ->
     {Clock, Properties} = TxId,
-    io:format("~n===~nUPDATES: '~p'~n===~n~n", [Updates]),
     EncMsg = antidote_pb_codec:encode_request({static_update_objects, Clock, Properties, Updates}),
     Result = antidotec_pb_socket:call_infinity(Pid, {req, EncMsg, ?TIMEOUT}),
     case Result of
@@ -167,6 +166,14 @@ read_objects(Pid, Objects, Transaction) ->
             {ok, ResObjects};
         Other ->
             Other
+    end.
+
+read_values(Pid, Objects, Tx, Key) ->
+    case read_values(Pid, Objects, Tx) of
+        {ok, Values} ->
+            {ok, decrypt_values(Values, Key)};
+        Error ->
+            Error
     end.
 
 -spec read_values(Pid::pid(), Objects::[term()], {interactive | static, TxId::binary()}) -> {ok, [term()]}  | {error, term()}.
@@ -221,19 +228,13 @@ encrypt_updates([{{_, Type, _} = Object, Op, Params} = Update | Updates], Key, A
             encrypt_updates(Updates, Key, [Update | Acc])
     end.
 
-decrypt_values(Objects, Values, Key) ->
-    decrypt_values(Objects, Values, Key, []).
+decrypt_values(Values, Key) ->
+    decrypt_values(Values, Key, []).
 
-decrypt_values([], [], _Key, Acc) ->
+decrypt_values([], _Key, Acc) ->
     lists:reverse(Acc);
-decrypt_values([{_, Type, _} | Objects], [Value | Values], Key, Acc) ->
-    case antidotec_datatype:is_secure(Type) of
-        true ->
-            {ok, Mod} = antidotec_datatype:module_from_secure_type(Type),
-            decrypt_values(Objects, Values, Key, [Mod:decrypt(Value, Key) | Acc]);
-        false ->
-            decrypt_values(Objects, Values, Key, [Value | Acc])
-    end.
+decrypt_values([Value | Values], Key, Acc) ->
+    decrypt_values(Values, Key, [decrypt_value(Value, Key) | Acc]).
 
 encrypt_op(antidote_secure_crdt_register_lww, {assign, Value}, Key) ->
     {assign, antidotec_crypto:probabilistic_encrypt(Value, Key)};
@@ -252,3 +253,23 @@ encrypt_op(antidote_secure_crdt_map_go, {update, Ops}, Key) when is_list(Ops) ->
     {update, EncryptedOps};
 encrypt_op(antidote_secure_crdt_map_go, {update, Op}, Key) ->
     encrypt_op(antidote_secure_crdt_map_go, {update, [Op]}, Key).
+
+decrypt_value({antidote_secure_crdt_register_lww, Value}, Key) ->
+    {antidote_secure_crdt_register_lww, antidotec_crypto:probabilistic_decrypt(Value, Key)};
+decrypt_value({antidote_secure_crdt_set_aw, Values}, Key) ->
+    DecryptedValues = lists:map(fun(V) ->
+        antidotec_crypto:deterministic_decrypt(V, Key)
+    end, Values),
+    {antidote_secure_crdt_set_aw, DecryptedValues};
+decrypt_value({map, Entries}, Key) ->
+    {antidote_secure_crdt_map_go, DecryptedEntries} = decrypt_value({antidote_secure_crdt_map_go, Entries}, Key),
+    {map, DecryptedEntries};
+decrypt_value({antidote_secure_crdt_map_go, Entries}, Key) ->
+    DecryptedEntries = lists:map(fun({{MapKey, Type}, Value}) ->
+        Object = {antidotec_crypto:deterministic_decrypt(MapKey, Key), Type},
+        {Type, DecryptedValue} = decrypt_value({Type, Value}, Key),
+        {Object, DecryptedValue}
+    end, Entries),
+    {antidote_secure_crdt_map_go, DecryptedEntries};
+decrypt_value(Object, _Key) ->
+    Object.
